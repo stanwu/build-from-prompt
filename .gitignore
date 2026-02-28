@@ -1,0 +1,9 @@
+# Sentinel files written by build.sh after a successful run
+.built/
+
+# Claude Code local project settings
+.claude/
+
+# bats-core local install (run `make test` to reinstall)
+test/bats/
+test/bats-src/

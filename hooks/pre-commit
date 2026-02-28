@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# hooks/pre-commit — Security scan for staged files
+#
+# Install:   make install-hooks
+# Uninstall: make uninstall-hooks
+# Skip once: git commit --no-verify
+#
+# Lines annotated with "# nosec" are excluded from scanning.
+
+set -uo pipefail
+
+# ── Colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
+CYAN='\033[0;36m'; NC='\033[0m'
+
+BLOCKS=0
+WARNS=0
+
+# ── Inner scanner ─────────────────────────────────────────────────────────────
+# check_file FILE
+#   Reads FILE, strips lines with "# nosec", then scans for credentials and
+#   sensitive patterns.  Updates the global BLOCKS / WARNS counters.
+check_file() {
+    local file="$1"
+
+    # Skip binary files
+    if ! grep -qI '' "$file" 2>/dev/null; then
+        return
+    fi
+
+    # Strip nosec lines before scanning
+    local content
+    content="$(grep -v '#[[:space:]]*nosec' "$file" 2>/dev/null || true)"
+    [[ -z "$content" ]] && return
+
+    local file_blocks=0 file_warns=0
+
+    # _chk LEVEL DESC [grep-flags] PATTERN
+    # Passes PATTERN via -e to avoid patterns starting with "-" being read as
+    # grep flags (e.g. PEM headers).  Bash 3.2 compatible array indexing.
+    _chk() {
+        local level="$1" desc="$2"; shift 2
+        local args=("$@")
+        local last=$(( ${#args[@]} - 1 ))
+        local pattern="${args[$last]}"
+        local flags=("${args[@]:0:$last}")
+        if printf '%s' "$content" | grep -q "${flags[@]}" -e "$pattern" 2>/dev/null; then
+            if [[ "$level" == BLOCK ]]; then
+                printf '  %b[BLOCK]%b %s\n' "$RED" "$NC" "$desc"
+                file_blocks=$(( file_blocks + 1 ))
+            else
+                printf '  %b[WARN] %b %s\n' "$YELLOW" "$NC" "$desc"
+                file_warns=$(( file_warns + 1 ))
+            fi
+        fi
+    }
+
+    # ── Credentials / secrets (BLOCK) ──────────────────────────────────────
+    _chk BLOCK "PEM private key or certificate" \
+        -E '-----BEGIN[[:space:]]+(RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|-----BEGIN CERTIFICATE-----'
+    _chk BLOCK "OpenAI API key (sk-…)" \
+        -E 'sk-[A-Za-z0-9_-]{24,}'
+    _chk BLOCK "Anthropic API key (sk-ant-…)" \
+        -E 'sk-ant-[A-Za-z0-9-]{20,}'
+    _chk BLOCK "GitHub personal access token (ghp_/ghs_/gho_)" \
+        -E 'gh[pso]_[A-Za-z0-9]{36,}'
+    _chk BLOCK "AWS access key ID (AKIA…)" \
+        -E 'AKIA[A-Z0-9]{16}'
+    _chk BLOCK "Slack token (xox[bprs]-…)" \
+        -E 'xox[bprs]-[A-Za-z0-9-]{10,}'
+    _chk BLOCK "Generic Bearer token" \
+        -E 'Bearer[[:space:]]+[A-Za-z0-9+/=._-]{32,}'
+
+    # ── Probable credentials (WARN) ────────────────────────────────────────
+    _chk WARN "Possible inline credential (password/secret/token/key=…)" \
+        -iE '(password|passwd|secret|api_?key|auth_?token)[[:space:]]*[:=][[:space:]]*[^[:space:]]{8,}'
+    _chk WARN "Database connection string with credentials" \
+        -iE '(mysql|postgres|mongodb)://[^[:space:]]*:[^[:space:]]+@'
+
+    # ── Summary for this file ──────────────────────────────────────────────
+    if [[ $file_blocks -gt 0 || $file_warns -gt 0 ]]; then
+        printf '%b[hook]%b %s\n' "$CYAN" "$NC" "$file"
+        [[ $file_warns  -gt 0 ]] && \
+            printf '  %b→%b %d warning(s) — review before committing\n' \
+                "$YELLOW" "$NC" "$file_warns"
+        [[ $file_blocks -gt 0 ]] && \
+            printf '  %b→%b %d blocking issue(s)\n' "$RED" "$NC" "$file_blocks"
+    fi
+
+    BLOCKS=$(( BLOCKS + file_blocks ))
+    WARNS=$(( WARNS + file_warns ))
+}
+
+# ── Scan every staged text file ───────────────────────────────────────────────
+printf '%b[hook]%b Security scan (staged files)...\n' "$CYAN" "$NC"
+
+while IFS= read -r file; do
+    [[ -f "$file" ]] && check_file "$file"
+done < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+
+# ── Result ────────────────────────────────────────────────────────────────────
+echo ""
+if [[ $BLOCKS -eq 0 && $WARNS -eq 0 ]]; then
+    printf '%b[hook]%b %b✓%b No issues found — commit allowed.\n' \
+        "$CYAN" "$NC" "$GREEN" "$NC"
+    exit 0
+fi
+
+if [[ $WARNS -gt 0 && $BLOCKS -eq 0 ]]; then
+    printf '%b[hook]%b %b→%b %d warning(s) found — commit allowed (review recommended).\n' \
+        "$CYAN" "$NC" "$YELLOW" "$NC" "$WARNS"
+    printf '       Add  # nosec  to suppress a specific line.\n'
+    exit 0
+fi
+
+printf '%b[hook]%b %b→%b %d blocking issue(s) found. Commit aborted.\n' \
+    "$CYAN" "$NC" "$RED" "$NC" "$BLOCKS"
+printf '\n'
+printf '  To suppress a specific line: append  # nosec  as a comment.\n'
+printf '  To skip the hook entirely:   git commit --no-verify\n'
+printf '\n'
+exit 1
