@@ -1,5 +1,7 @@
 # prompt-make
 
+[![CI](https://github.com/stanwu/prompt-make/actions/workflows/ci.yml/badge.svg)](https://github.com/stanwu/prompt-make/actions/workflows/ci.yml)
+
 A universal shell script that turns a Markdown prompt file into a fully executed AI coding session. Point it at any `.md` file describing a task, and `build.sh` assembles the prompt, invokes your preferred AI agent, and runs it in any target directory — with a sentinel guard to prevent accidental re-runs.
 
 ## Features
