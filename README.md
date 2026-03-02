@@ -1,6 +1,6 @@
-# prompt-make
+# build-from-prompt
 
-[![CI](https://github.com/stanwu/prompt-make/actions/workflows/ci.yml/badge.svg)](https://github.com/stanwu/prompt-make/actions/workflows/ci.yml)
+[![CI](https://github.com/stanwu/build-from-prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/stanwu/build-from-prompt/actions/workflows/ci.yml)
 
 A universal shell script that turns a Markdown prompt file into a fully executed AI coding session. Point it at any `.md` file describing a task, and `build.sh` assembles the prompt, invokes your preferred AI agent, and runs it in any target directory — with a sentinel guard to prevent accidental re-runs.
 
@@ -25,15 +25,15 @@ A universal shell script that turns a Markdown prompt file into a fully executed
 ## Installation
 
 ```bash
-git clone https://github.com/<your-username>/prompt-make.git
-cd prompt-make
+git clone https://github.com/<your-username>/build-from-prompt.git
+cd build-from-prompt
 chmod +x build.sh
 ```
 
 Optionally add it to your `PATH`:
 
 ```bash
-ln -s "$PWD/build.sh" /usr/local/bin/prompt-make
+ln -s "$PWD/build.sh" /usr/local/bin/build-from-prompt
 ```
 
 ### Git Hooks
