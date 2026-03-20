@@ -7,3 +7,4 @@
 # bats-core local install (run `make test` to reinstall)
 test/bats/
 test/bats-src/
+.DS_Store
